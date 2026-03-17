@@ -68,13 +68,16 @@ def send_ntfy(titulo, mensaje, prioridad="high"):
         print("⚠️  NTFY_TOPIC no configurado, omitiendo notificación.")
         return
     try:
+        # Los headers HTTP solo aceptan ASCII, se eliminan emojis del titulo
+        titulo_ascii = titulo.encode("ascii", "ignore").decode("ascii").strip()
         r = requests.post(
             f"https://ntfy.sh/{topic}",
             data=mensaje.encode("utf-8"),
             headers={
-                "Title": titulo,
+                "Title": titulo_ascii,
                 "Priority": prioridad,
                 "Tags": "rotating_light",
+                "Content-Type": "text/plain; charset=utf-8",
             },
             timeout=10,
         )
