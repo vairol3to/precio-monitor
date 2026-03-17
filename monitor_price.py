@@ -3,49 +3,58 @@ import csv
 import os
 from datetime import datetime
 
-# ── Configuración ──────────────────────────────────────────────
-PRODUCT_URL  = "https://ninoma.com/products/the-melancholy-of-haruhi-bicute-bunnies-figure-nagato-yuki"
-API_URL      = "https://ninoma.com/products/the-melancholy-of-haruhi-bicute-bunnies-figure-nagato-yuki.json"
-CSV_FILE     = "precio_historial.csv"
-PRECIO_INICIAL = 2000   # ¥2,000 JPY (temporal para prueba de notificación)
+# ── Productos a monitorear ─────────────────────────────────────
+PRODUCTOS = [
+    {
+        "nombre":    "Nagato Yuki Figure",
+        "url":       "https://ninoma.com/products/the-melancholy-of-haruhi-bicute-bunnies-figure-nagato-yuki",
+        "api_url":   "https://ninoma.com/products/the-melancholy-of-haruhi-bicute-bunnies-figure-nagato-yuki.json",
+        "csv_file":  "precio_nagato.csv",
+        "precio_inicial": 2200,
+    },
+    {
+        "nombre":    "Asahina Mikuru Figure",
+        "url":       "https://ninoma.com/products/the-melancholy-of-haruhi-suzumiya-bicute-bunnies-figure-asahina-mikuru",
+        "api_url":   "https://ninoma.com/products/the-melancholy-of-haruhi-suzumiya-bicute-bunnies-figure-asahina-mikuru.json",
+        "csv_file":  "precio_mikuru.csv",
+        "precio_inicial": 2200,
+    },
+]
 # ───────────────────────────────────────────────────────────────
 
 
-def get_price():
-    """Obtiene el precio via la API JSON de Shopify (sin bloqueos)."""
+def get_price(api_url, nombre):
     try:
-        r = requests.get(API_URL, timeout=15)
+        r = requests.get(api_url, timeout=15)
         r.raise_for_status()
         data = r.json()
-        # El precio está en variants[0].price (viene como string, ej: "2200.00")
         price_str = data["product"]["variants"][0]["price"]
         price = int(float(price_str))
-        currency = data["product"]["variants"][0].get("presentment_prices", [{}])
-        print(f"✅ Precio obtenido: {price}")
+        print(f"  ✅ [{nombre}] Precio obtenido: ¥{price:,}")
         return price
     except Exception as e:
-        print(f"❌ Error al obtener precio: {e}")
+        print(f"  ❌ [{nombre}] Error: {e}")
         return None
 
 
-def get_last_price():
-    if not os.path.exists(CSV_FILE):
-        return PRECIO_INICIAL
-    with open(CSV_FILE, "r", encoding="utf-8") as f:
+def get_last_price(csv_file, precio_inicial):
+    if not os.path.exists(csv_file):
+        return precio_inicial
+    with open(csv_file, "r", encoding="utf-8") as f:
         rows = list(csv.reader(f))
         if len(rows) <= 1:
-            return PRECIO_INICIAL
+            return precio_inicial
         for row in reversed(rows[1:]):
             try:
                 return int(row[1])
             except (ValueError, IndexError):
                 continue
-    return PRECIO_INICIAL
+    return precio_inicial
 
 
-def save_to_csv(precio_actual, variacion, precio_anterior):
-    file_exists = os.path.exists(CSV_FILE)
-    with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
+def save_to_csv(csv_file, precio_actual, variacion, precio_anterior):
+    file_exists = os.path.exists(csv_file)
+    with open(csv_file, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if not file_exists:
             writer.writerow(["fecha_hora", "precio_jpy", "variacion", "precio_anterior"])
@@ -62,13 +71,11 @@ def save_to_csv(precio_actual, variacion, precio_anterior):
 
 
 def send_ntfy(titulo, mensaje, prioridad="high"):
-    """Envía push notification via ntfy.sh"""
     topic = os.environ.get("NTFY_TOPIC")
     if not topic:
         print("⚠️  NTFY_TOPIC no configurado, omitiendo notificación.")
         return
     try:
-        # Los headers HTTP solo aceptan ASCII, se eliminan emojis del titulo
         titulo_ascii = titulo.encode("ascii", "ignore").decode("ascii").strip()
         r = requests.post(
             f"https://ntfy.sh/{topic}",
@@ -81,42 +88,57 @@ def send_ntfy(titulo, mensaje, prioridad="high"):
             },
             timeout=10,
         )
-        print(f"📲 Notificación enviada (status {r.status_code})")
+        print(f"  📲 Notificación enviada (status {r.status_code})")
     except Exception as e:
-        print(f"❌ Error enviando notificación: {e}")
+        print(f"  ❌ Error enviando notificación: {e}")
 
 
-def main():
-    print(f"🔍 Chequeando precio... {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    precio_actual = get_price()
+def check_producto(producto):
+    """Chequea un producto y retorna mensaje de cambio o None."""
+    nombre     = producto["nombre"]
+    precio_actual = get_price(producto["api_url"], nombre)
 
     if precio_actual is None:
-        print("❌ ERROR: No se pudo obtener el precio.")
-        save_to_csv("ERROR", "N/A", get_last_price())
-        return
+        save_to_csv(producto["csv_file"], "ERROR", "N/A",
+                    get_last_price(producto["csv_file"], producto["precio_inicial"]))
+        return None
 
-    precio_anterior = get_last_price()
+    precio_anterior = get_last_price(producto["csv_file"], producto["precio_inicial"])
     variacion = precio_actual - precio_anterior
-    save_to_csv(precio_actual, variacion, precio_anterior)
+    save_to_csv(producto["csv_file"], precio_actual, variacion, precio_anterior)
 
-    print(f"💰 Precio actual:   ¥{precio_actual:,}")
-    print(f"💰 Precio anterior: ¥{precio_anterior:,}")
-    print(f"📊 Variación:       {'+' if variacion > 0 else ''}{variacion:,}")
+    print(f"  💰 Actual: ¥{precio_actual:,} | Anterior: ¥{precio_anterior:,} | Variación: {'+' if variacion > 0 else ''}{variacion:,}")
 
     if variacion != 0:
         porcentaje = (variacion / precio_anterior) * 100
-        signo = "📈 SUBIÓ" if variacion > 0 else "📉 BAJÓ"
-        print(f"🚨 ¡El precio {signo}! {porcentaje:+.2f}%")
-        titulo = f"{'📈' if variacion > 0 else '📉'} Nagato Yuki Figure {signo.split()[1]}"
-        mensaje = (
-            f"Precio anterior: ¥{precio_anterior:,}\n"
-            f"Precio actual:   ¥{precio_actual:,}\n"
-            f"Variación: {'+' if variacion > 0 else ''}{variacion:,} ({porcentaje:+.2f}%)\n"
-            f"{PRODUCT_URL}"
+        signo = "SUBIO" if variacion > 0 else "BAJO"
+        linea = (
+            f"{'📈' if variacion > 0 else '📉'} {nombre}: {signo} {porcentaje:+.2f}%\n"
+            f"   ¥{precio_anterior:,} → ¥{precio_actual:,}  ({'+' if variacion > 0 else ''}{variacion:,})\n"
+            f"   {producto['url']}"
         )
+        return linea
+    return None
+
+
+def main():
+    print(f"🔍 Chequeando precios... {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+    cambios = []
+    for producto in PRODUCTOS:
+        print(f"→ {producto['nombre']}")
+        resultado = check_producto(producto)
+        if resultado:
+            cambios.append(resultado)
+        print()
+
+    if cambios:
+        titulo = f"Cambio de precio - {len(cambios)} producto(s)"
+        mensaje = "🚨 Cambio de precio detectado!\n\n" + "\n\n".join(cambios)
+        print("🚨 ¡Hay cambios! Enviando notificación...")
         send_ntfy(titulo, mensaje)
     else:
-        print("✅ Sin cambios de precio.")
+        print("✅ Sin cambios en ningún producto.")
 
 
 if __name__ == "__main__":
