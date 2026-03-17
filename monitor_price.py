@@ -22,7 +22,6 @@ def get_price():
         selectors = [
             {"class": "andes-money-amount__fraction"},
             {"class": "price-tag-fraction"},
-            {"itemprop": "price"},
         ]
         for sel in selectors:
             el = soup.find("span", sel)
@@ -31,7 +30,7 @@ def get_price():
                 if price_text.isdigit():
                     return int(price_text)
 
-        # Fallback: buscar meta tag
+        # Fallback: meta tag
         meta = soup.find("meta", {"itemprop": "price"})
         if meta and meta.get("content"):
             return int(float(meta["content"]))
@@ -51,8 +50,7 @@ def get_last_price():
             return PRECIO_INICIAL
         for row in reversed(rows[1:]):
             try:
-                val = int(row[1])
-                return val
+                return int(row[1])
             except (ValueError, IndexError):
                 continue
     return PRECIO_INICIAL
@@ -64,7 +62,10 @@ def save_to_csv(precio_actual, variacion, precio_anterior):
         writer = csv.writer(f)
         if not file_exists:
             writer.writerow(["fecha_hora", "precio", "variacion", "precio_anterior"])
-        var_str = f"+{variacion}" if isinstance(variacion, int) and variacion > 0 else str(variacion)
+        if isinstance(variacion, int):
+            var_str = f"+{variacion}" if variacion > 0 else str(variacion)
+        else:
+            var_str = str(variacion)
         writer.writerow([
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             precio_actual,
@@ -73,28 +74,13 @@ def save_to_csv(precio_actual, variacion, precio_anterior):
         ])
 
 
-def send_whatsapp(message):
-    phone = os.environ.get("WHATSAPP_PHONE")
-    apikey = os.environ.get("WHATSAPP_APIKEY")
-    if not phone or not apikey:
-        print("⚠️  Credenciales de WhatsApp no configuradas.")
-        return
-    url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={requests.utils.quote(message)}&apikey={apikey}"
-    try:
-        response = requests.get(url, timeout=10)
-        print(f"📱 WhatsApp enviado. Status: {response.status_code}")
-    except Exception as e:
-        print(f"❌ Error enviando WhatsApp: {e}")
-
-
 def main():
     print(f"🔍 Chequeando precio... {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     precio_actual = get_price()
 
     if precio_actual is None:
         print("❌ ERROR: No se pudo obtener el precio.")
-        precio_anterior = get_last_price()
-        save_to_csv("ERROR", "N/A", precio_anterior)
+        save_to_csv("ERROR", "N/A", get_last_price())
         return
 
     precio_anterior = get_last_price()
@@ -108,18 +94,8 @@ def main():
 
     if variacion != 0:
         porcentaje = (variacion / precio_anterior) * 100
-        signo = "📈" if variacion > 0 else "📉"
-        mensaje = (
-            f"🚨 ¡Cambio de precio detectado!\n\n"
-            f"🚲 Bicicleta Paseo Dama Rodado 26 - MercadoLibre\n\n"
-            f"💰 Precio anterior: ${precio_anterior:,}\n"
-            f"💰 Precio actual:   ${precio_actual:,}\n"
-            f"{signo} Variación: {'+' if variacion > 0 else ''}{variacion:,} ({porcentaje:+.2f}%)\n\n"
-            f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"🔗 {URL}"
-        )
-        print("\n🚨 ¡El precio cambió! Enviando notificación...")
-        send_whatsapp(mensaje)
+        signo = "📈 SUBIÓ" if variacion > 0 else "📉 BAJÓ"
+        print(f"\n🚨 ¡El precio {signo}! {porcentaje:+.2f}%")
     else:
         print("✅ Sin cambios de precio.")
 
