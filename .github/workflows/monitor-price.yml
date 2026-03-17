@@ -25,6 +25,8 @@ jobs:
         run: pip install requests beautifulsoup4
 
       - name: 🔍 Chequear precio
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: python monitor_price.py
 
       - name: 💾 Guardar historial en el repositorio

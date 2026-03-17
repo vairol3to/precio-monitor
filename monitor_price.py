@@ -61,6 +61,28 @@ def save_to_csv(precio_actual, variacion, precio_anterior):
         ])
 
 
+def send_ntfy(titulo, mensaje, prioridad="high"):
+    """Envía push notification via ntfy.sh"""
+    topic = os.environ.get("NTFY_TOPIC")
+    if not topic:
+        print("⚠️  NTFY_TOPIC no configurado, omitiendo notificación.")
+        return
+    try:
+        r = requests.post(
+            f"https://ntfy.sh/{topic}",
+            data=mensaje.encode("utf-8"),
+            headers={
+                "Title": titulo,
+                "Priority": prioridad,
+                "Tags": "rotating_light",
+            },
+            timeout=10,
+        )
+        print(f"📲 Notificación enviada (status {r.status_code})")
+    except Exception as e:
+        print(f"❌ Error enviando notificación: {e}")
+
+
 def main():
     print(f"🔍 Chequeando precio... {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     precio_actual = get_price()
@@ -82,6 +104,14 @@ def main():
         porcentaje = (variacion / precio_anterior) * 100
         signo = "📈 SUBIÓ" if variacion > 0 else "📉 BAJÓ"
         print(f"🚨 ¡El precio {signo}! {porcentaje:+.2f}%")
+        titulo = f"{'📈' if variacion > 0 else '📉'} Nagato Yuki Figure {signo.split()[1]}"
+        mensaje = (
+            f"Precio anterior: ¥{precio_anterior:,}\n"
+            f"Precio actual:   ¥{precio_actual:,}\n"
+            f"Variación: {'+' if variacion > 0 else ''}{variacion:,} ({porcentaje:+.2f}%)\n"
+            f"{PRODUCT_URL}"
+        )
+        send_ntfy(titulo, mensaje)
     else:
         print("✅ Sin cambios de precio.")
 
