@@ -1,0 +1,36 @@
+name: 🚲 Monitor Precio Bicicleta
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # Cada 5 minutos
+  workflow_dispatch:          # Permite ejecución manual desde GitHub
+
+jobs:
+  check-price:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repositorio
+        uses: actions/checkout@v4
+
+      - name: 🐍 Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Instalar dependencias
+        run: pip install requests beautifulsoup4
+
+      - name: 🔍 Chequear precio
+        env:
+          WHATSAPP_PHONE: ${{ secrets.WHATSAPP_PHONE }}
+          WHATSAPP_APIKEY: ${{ secrets.WHATSAPP_APIKEY }}
+        run: python monitor_price.py
+
+      - name: 💾 Guardar historial en el repositorio
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Actions Bot"
+          git add precio_historial.csv
+          git diff --quiet && git diff --staged --quiet || git commit -m "📊 Update precio_historial.csv - $(date +'%Y-%m-%d %H:%M:%S')"
+          git push
