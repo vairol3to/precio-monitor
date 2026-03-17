@@ -7,7 +7,7 @@ from datetime import datetime
 PRODUCT_URL  = "https://ninoma.com/products/the-melancholy-of-haruhi-bicute-bunnies-figure-nagato-yuki"
 API_URL      = "https://ninoma.com/products/the-melancholy-of-haruhi-bicute-bunnies-figure-nagato-yuki.json"
 CSV_FILE     = "precio_historial.csv"
-PRECIO_INICIAL = 2200   # ¥2,200 JPY (precio de referencia inicial)
+PRECIO_INICIAL = 2000   # ¥2,000 JPY (temporal para prueba de notificación)
 # ───────────────────────────────────────────────────────────────
 
 
